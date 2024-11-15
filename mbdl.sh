@@ -16,7 +16,6 @@ OS=$(uname -s)
 # Download hash values from tag, save the SHA256 hashes
 curl -XPOST -d "query=get_file_type&selector=time&file_type=${TAG}&limit=${DOWNLOAD_LIMIT}" https://mb-api.abuse.ch/api/v1/ | grep sha256_hash | awk '{print $2}' >${TAG}.raw
 
-# OS Loop
 # If macOS, clean up the download to remove "'s and ,'s
 if [ ${OS} == Darwin ]; then
 	sed -i.bak 's/\"//g' ${TAG}.raw
@@ -39,21 +38,21 @@ mv ${TAG}.raw ${TAG}.hash
 
 # Download the samples using their hash vaules
 while read h; do
-    if [[ -f ".${h}" ]]; then
-        continue
-    fi
-    curl -XPOST -d "query=get_file&sha256_hash=${h}" -o ${h} https://mb-api.abuse.ch/api/v1/;
-    7zz -y x ${h} -p"infected"
-    rm ${h}
+	if [[ -f ".${h}" ]]; then
+		continue
+	fi
+	curl -XPOST -d "query=get_file&sha256_hash=${h}" -o ${h} https://mb-api.abuse.ch/api/v1/
+	7zz -y x ${h} -p"infected"
+	rm ${h}
 
 	# it's a dmg
 	if [[ -f "${h}.dmg" ]]; then
 		hdiutil attach -readonly -mountpoint "/Volumes/${h}" "${h}.dmg"
-		rsync -va "/Volumes/${h}" "${h}"
+		rsync -va "/Volumes/${h}" "${h}_dmg"
 		hdiutil eject "/Volumes/${h}"
+		rm -f "${h}.dmg"
 	fi
-    touch .${h}
-	exit 1
+	touch .${h}
 done <${TAG}.hash
 
 rm ${TAG}.raw.bak
