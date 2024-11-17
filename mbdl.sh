@@ -4,7 +4,7 @@
 # Define tag and number of samples to download
 set -e -o pipefail -u
 
-DOWNLOAD_LIMIT=50
+DOWNLOAD_LIMIT=100
 TAG=$2
 case "$1" in
 	file_type)
