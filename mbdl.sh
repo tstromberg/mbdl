@@ -1,11 +1,24 @@
 #!/bin/bash
-# Bash script to download Malware Bazaar based on tag
+# Download Malware Bazaar samples based on tag or file extension
 
 # Define tag and number of samples to download
 set -e -o pipefail -u
 
-TAG=$1
-DOWNLOAD_LIMIT=10
+DOWNLOAD_LIMIT=50
+TAG=$2
+case "$1" in
+	file_type)
+		query="query=get_file_type&selector=time&file_type=${TAG}&limit=${DOWNLOAD_LIMIT}"
+		;;
+	tag)
+		query="query=get_taginfo&&selector=time&tag=${TAG}&limit=${DOWNLOAD_LIMIT}"
+		;;
+	*)
+		echo "unknown query type: $1"
+		exit 1
+		;;
+esac
+
 
 mkdir -p "${TAG}"
 cd "${TAG}" || exit 1
@@ -14,46 +27,41 @@ cd "${TAG}" || exit 1
 OS=$(uname -s)
 
 # Download hash values from tag, save the SHA256 hashes
-curl -XPOST -d "query=get_file_type&selector=time&file_type=${TAG}&limit=${DOWNLOAD_LIMIT}" https://mb-api.abuse.ch/api/v1/ | grep sha256_hash | awk '{print $2}' >${TAG}.raw
+echo "running query: ${query}"
+results=$(mktemp)
+curl -s -XPOST -d "${query}" https://mb-api.abuse.ch/api/v1/ > "${results}"
 
-# If macOS, clean up the download to remove "'s and ,'s
-if [ ${OS} == Darwin ]; then
-	sed -i.bak 's/\"//g' ${TAG}.raw
-	rm ${TAG}.raw.bak
-	sed -i.bak 's/\,//' ${TAG}.raw
-	rm ${TAG}.raw.bak
-
-# If Linux, clean up the download to remove "'s and ,'s
-else
-	if [ ${OS} == Linux ]; then
-		sed -i 's/\"//g' ${TAG}.raw
-		sed -i 's/\,//' ${TAG}.raw
-
-	# Exiting OS loop
-	fi
+grep sha256_hash "${results}" | awk '{print $2}' >${TAG}.hashes || true
+if [[ ! -s "${TAG}.hashes" ]]; then
+	echo "no results for ${query}: $(cat ${results})"
+	exit 1
 fi
 
-# Create the hash file from the raw file
-mv ${TAG}.raw ${TAG}.hash
+wc -l "${TAG}.hashes"
 
 # Download the samples using their hash vaules
-while read h; do
-	if [[ -f ".${h}" ]]; then
+for hash in $(cut -d\" -f2 ${TAG}.hashes); do
+	if [[ -f ".${hash}" ]]; then
+		echo "${TAG}: ${hash} exists"
 		continue
 	fi
-	curl -XPOST -d "query=get_file&sha256_hash=${h}" -o ${h} https://mb-api.abuse.ch/api/v1/
-	7zz -y x ${h} -p"infected"
-	rm ${h}
+	echo "${TAG}: fetching ${hash}"
+	curl -s -XPOST -d "query=get_file&sha256_hash=${hash}" -o ${hash} https://mb-api.abuse.ch/api/v1/
+	7zz -y x ${hash} -p"infected" >/dev/null
+	rm ${hash}
 
 	# it's a dmg
-	if [[ -f "${h}.dmg" ]]; then
-		hdiutil attach -readonly -mountpoint "/Volumes/${h}" "${h}.dmg"
-		rsync -va "/Volumes/${h}" "${h}_dmg"
-		hdiutil eject "/Volumes/${h}"
-		rm -f "${h}.dmg"
+	if [[ -f "${hash}.dmg" ]]; then
+		hdiutil attach -readonly -mountpoint "/Volumes/${hash}" "${hash}.dmg"
+		rsync -va "/Volumes/${hash}" "${hash}_dmg"
+		hdiutil eject "/Volumes/${hash}"
+		rm -f "${hash}.dmg"
 	fi
-	touch .${h}
-done <${TAG}.hash
+	pwd
+	ls -la | grep "${hash}"
+	find ${hash}* -type f -exec chmod 400 {} \;
+	touch .${hash}
+done
 
-rm ${TAG}.raw.bak
-rm ${TAG}.hash
+rm ${TAG}.hashes
+
