@@ -1,4 +1,4 @@
-simple script to download and extract recent samples for a particular file type. For example:
+script to download and extract recent MalwareBazaar samples for a particular file type. For example:
 
 ```
 ./mbdl.sh dmg
