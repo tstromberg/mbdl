@@ -4,7 +4,15 @@
 # Define tag and number of samples to download
 set -e -o pipefail -u
 
-DOWNLOAD_LIMIT=100
+7z -h >/dev/null 2>/dev/null && unzip=7z
+7zz -h >/dev/null 2>/dev/null && unzip=7zz
+
+if [[ -z "${unzip}" ]]; then
+    echo "this tool requires 7-Zip (7zz or 7z) to be installed"
+    exit 1
+fi
+
+DOWNLOAD_LIMIT=50
 TAG=$2
 case "$1" in
 	file_type)
@@ -47,7 +55,7 @@ for hash in $(cut -d\" -f2 ${TAG}.hashes); do
 	fi
 	echo "${TAG}: fetching ${hash}"
 	curl -s -XPOST -d "query=get_file&sha256_hash=${hash}" -o ${hash} https://mb-api.abuse.ch/api/v1/
-	7zz -y x ${hash} -p"infected" >/dev/null
+	"${unzip}" -y x ${hash} -p"infected" >/dev/null
 	rm ${hash}
 
 	# it's a dmg
@@ -64,4 +72,3 @@ for hash in $(cut -d\" -f2 ${TAG}.hashes); do
 done
 
 rm ${TAG}.hashes
-
